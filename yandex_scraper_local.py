@@ -161,12 +161,12 @@ class YandexImageScraper:
     def step2_click_similar_images(self):
         """Step 2: Click 'Similar images' button (Image 2 -> Image 3)"""
         print("\n" + "=" * 60)
-        print("STEP 2: Click 'Similar Images'")
+        print("STEP 2:::::Start::::: Click 'Similar Images'")
         print("=" * 60)
 
         try:
             # Wait for results to load (Image 2)
-            time.sleep(2)
+            time.sleep(3)
 
             # Look for "Similar images" button
             print("→ Looking for 'Similar images' button...")
@@ -208,7 +208,10 @@ class YandexImageScraper:
             if similar_button:
                 similar_button.click()
                 print("✓ Clicked 'Similar images' button")
+                print("STEP 2:::::End::::: Click 'Similar Images'")
+
                 time.sleep(3)
+
                 return True
             else:
                 print("⚠ 'Similar images' button not found, continuing...")
@@ -219,34 +222,66 @@ class YandexImageScraper:
             return True  # Continue anyway
 
     def step3_scroll_until_show_more(self, max_scrolls=50):
-        """Step 3: Scroll to load images until 'Show more' appears (Image 3)"""
+        """Step 3: Scroll until page height stops increasing"""
         print("\n" + "=" * 60)
-        print("STEP 3: Scroll Until 'Show More' Button")
+        # print("STEP 3::::Start:::: Infinite Scroll (Height Check)")
+        # time.sleep(10)
         print("=" * 60)
+        print(f"→ Scrolling (max {max_scrolls} steps)...")
 
-        print(f"→ Scrolling (max {max_scrolls} times)...")
+        # 1. Get initial height
+        last_height = self.driver.execute_script("return document.body.scrollHeight")
+        no_change_count = 0
+
+        # print("STEP 3::::after execute_script('return document.body.scrollHeight')")
+        # time.sleep(10)
+
         for i in range(max_scrolls):
-            self.driver.execute_script(
-                "window.scrollTo(0, document.body.scrollHeight);"
-            )
-            time.sleep(5)
-
-            # Check for "Show more" button
+            # 2. Scroll to the bottom using Physical Keys
+            # Keys.END is the most reliable way to trigger "load more" events
             try:
-                show_more = self.driver.find_element(
-                    By.XPATH,
-                    "//*[contains(text(), 'Show more') or contains(text(), 'Показать')]",
-                )
-                if show_more.is_displayed():
-                    print(f"✓ 'Show more' button appeared after {i+1} scrolls")
-                    return True
+                self.driver.find_element(By.TAG_NAME, "body").send_keys(Keys.END)
             except:
-                pass
+                self.driver.execute_script(
+                    "window.scrollTo(0, document.body.scrollHeight);"
+                )
 
-            if (i + 1) % 10 == 0:
-                print(f"  Scrolled {i+1} times...")
+            # 3. Wait for content to load
+            # Yandex needs time to fetch images and render DOM
+            time.sleep(0.5)
 
-        print(f"→ Scrolling complete ({max_scrolls} scrolls)")
+            # 4. Calculate new height
+            new_height = self.driver.execute_script("return document.body.scrollHeight")
+
+            # 5. Logic: Did the page grow?
+            if new_height > last_height:
+                print(f"   ✓ New content loaded (Scroll {i+1})")
+                last_height = new_height
+                no_change_count = 0  # Reset patience
+            else:
+                # Height didn't change. Is it the end, or just lag?
+                no_change_count += 1
+                print(f"   ? No height change (Attempt {no_change_count}/3)")
+
+                # OPTIONAL: Try to find and click the button specifically if stuck
+                # (Only if you suspect the button requires a click to proceed)
+                if no_change_count == 2:
+                    try:
+                        btn = self.driver.find_element(
+                            By.CSS_SELECTOR, ".FetchListButton-Button"
+                        )
+                        # if btn.is_displayed():
+                        #     print("   → Clicking 'Show more' button to unblock...")
+                        #     self.driver.execute_script("arguments[0].click();", btn)
+                        #     time.sleep(3)
+                    except:
+                        pass
+
+                if no_change_count >= 3:
+                    print("✓ Page height stable. Reached the end.")
+                    break
+
+        print(f"→ Scrolling complete. Final Height: {last_height}")
         return True
 
     def step4_get_thumbnails(self):
