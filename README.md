@@ -1,3 +1,6 @@
+# All files is created mainly with Claude.ai and Gemini collaboration and sometimes modify with me.
+
+
 # Yandex Image Scraper - Local PC Version
 
 Standalone Python script for scraping images from Yandex reverse image search.
