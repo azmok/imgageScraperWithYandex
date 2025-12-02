@@ -284,7 +284,7 @@ class YandexImageScraper:
         print("-" * 60)
 
         try:
-            # Get thumbnail image URL for comparison
+            # Get thumbnail image URL (for initial reference)
             thumbnail_url = None
             thumbnail_data = None
             try:
@@ -313,6 +313,68 @@ class YandexImageScraper:
 
             time.sleep(2)
             print(f"[{index}] ✓ Preview opened")
+
+            # Get PREVIEW image (this is the fallback image)
+            preview_url = None
+            preview_data = None
+            print(f"[{index}] → Collecting preview image...")
+
+            try:
+                # Look for large preview images in the modal
+                preview_selectors = [
+                    "img.MMImage-Origin",
+                    "img.MMImage-Preview",
+                    "img[class*='Origin']",
+                    "img[class*='Preview']",
+                    "img[class*='Modal']",
+                    ".Modal img",
+                    ".MMModal img",
+                ]
+
+                preview_imgs = []
+                for selector in preview_selectors:
+                    try:
+                        imgs = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                        for img in imgs:
+                            if img.is_displayed():
+                                preview_imgs.append(img)
+                    except:
+                        continue
+
+                # If no specific preview selector worked, get all visible images
+                if not preview_imgs:
+                    all_imgs = self.driver.find_elements(By.TAG_NAME, "img")
+                    preview_imgs = [img for img in all_imgs if img.is_displayed()]
+
+                # Find largest preview image (usually the main preview)
+                if preview_imgs:
+                    largest_preview = max(
+                        preview_imgs,
+                        key=lambda img: img.size["width"] * img.size["height"],
+                    )
+                    preview_url = largest_preview.get_attribute("src")
+
+                    if (
+                        preview_url
+                        and preview_url.startswith("http")
+                        and preview_url != thumbnail_url
+                    ):
+                        print(f"[{index}] → Downloading preview image...")
+                        preview_data = self.download_image_data(preview_url)
+                        if preview_data:
+                            print(f"[{index}] ✓ Preview image ready (fallback)")
+                        else:
+                            print(f"[{index}] ⚠ Preview image download failed")
+                    else:
+                        print(f"[{index}] ⚠ Preview URL same as thumbnail or invalid")
+            except Exception as e:
+                print(f"[{index}] ⚠ Could not get preview image: {str(e)[:40]}")
+
+            # If preview failed, keep thumbnail as ultimate fallback
+            if not preview_data and thumbnail_data:
+                print(f"[{index}] → Using thumbnail as ultimate fallback")
+                preview_data = thumbnail_data
+                preview_url = thumbnail_url
 
             # STEP 6: Click download button (Image 5 - red circle)
             print(f"[{index}] Step 6: Looking for download button...")
@@ -576,19 +638,27 @@ class YandexImageScraper:
                     except:
                         pass
 
-            # STEP 7 Fallback: Download thumbnail if download button not found or failed
+            # STEP 7 Fallback: Use preview image if hi-res not found or failed
             if not success:
-                print(f"[{index}] → Using thumbnail fallback...")
-                if thumbnail_url and thumbnail_url not in self.downloaded_urls:
-                    if thumbnail_data:
-                        if self.save_image(thumbnail_url, thumbnail_data, index):
-                            success = True
-                    else:
-                        # Download thumbnail
-                        thumbnail_data = self.download_image_data(thumbnail_url)
-                        if thumbnail_data:
-                            if self.save_image(thumbnail_url, thumbnail_data, index):
-                                success = True
+                print(f"[{index}] → Using preview image fallback...")
+                if (
+                    preview_url
+                    and preview_data
+                    and preview_url not in self.downloaded_urls
+                ):
+                    if self.save_image(preview_url, preview_data, index):
+                        success = True
+                        print(f"[{index}] ✓ Saved preview image")
+                elif (
+                    thumbnail_url
+                    and thumbnail_data
+                    and thumbnail_url not in self.downloaded_urls
+                ):
+                    # Ultimate fallback: thumbnail
+                    print(f"[{index}] → Using thumbnail as ultimate fallback...")
+                    if self.save_image(thumbnail_url, thumbnail_data, index):
+                        success = True
+                        print(f"[{index}] ✓ Saved thumbnail image")
 
             # STEP 8: Close preview panel (click X button)
             print(f"[{index}] Step 8: Closing preview panel...")
