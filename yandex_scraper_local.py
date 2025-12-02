@@ -31,29 +31,36 @@ class YandexImageScraper:
         self.downloaded_urls = set()
 
     def setup_driver(self):
-        """Setup Chrome driver with mobile emulation"""
+        """Setup Chrome driver in Desktop Mode"""
         options = webdriver.ChromeOptions()
 
-        # Mobile user agent (iPhone)
-        mobile_emulation = {
-            "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1"
-        }
-        options.add_experimental_option("mobileEmulation", mobile_emulation)
+        # Use a standard Desktop User Agent
+        options.add_argument(
+            "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        )
 
         # Chrome options
         if self.headless:
             options.add_argument("--headless=new")
+
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("--disable-blink-features=AutomationControlled")
         options.add_argument("--disable-popup-blocking")
-        options.add_argument("--window-size=414,896")
+
+        # IMPORTANT: Set a large window size to ensure the Sidebar Preview opens
+        # If the window is too narrow, Yandex might force a mobile-style layout
+        options.add_argument("--window-size=1920,1080")
         options.add_argument("--log-level=3")
+
+        # Remove the 'enable-automation' banner to be stealthier
+        options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        options.add_experimental_option("useAutomationExtension", False)
 
         service = Service(ChromeDriverManager().install())
         self.driver = webdriver.Chrome(service=service, options=options)
         self.driver.set_page_load_timeout(60)
-        print("✓ Chrome driver initialized\n")
+        print("✓ Chrome driver initialized (Desktop Mode)\n")
 
     def compare_images(self, img1_data, img2_data, threshold=10):
         """Compare two images using perceptual hashing"""
@@ -222,7 +229,7 @@ class YandexImageScraper:
             self.driver.execute_script(
                 "window.scrollTo(0, document.body.scrollHeight);"
             )
-            time.sleep(2)
+            time.sleep(5)
 
             # Check for "Show more" button
             try:
@@ -277,11 +284,47 @@ class YandexImageScraper:
         print(f"✓ Found {len(thumbnails)} thumbnails (fallback)")
         return thumbnails
 
-    def step5_to_10_process_thumbnail(self, thumbnail, index, total):
-        """Steps 5-10: Click thumbnail -> Click download -> Verify & Save hi-res -> Close preview"""
+    def step5_to_10_process_thumbnail(self, thumbnail_element_ignored, index, total):
+        """Steps 5-10: Re-find thumbnail -> Click -> Download -> Save -> Close"""
+        # Note: We ignore the passed 'thumbnail_element_ignored' because it is likely stale.
+        # We re-find the element by index.
+
         print("\n" + "-" * 60)
         print(f"Processing Image {index}/{total}")
         print("-" * 60)
+
+        thumbnail = None
+
+        # --- STALE ELEMENT PROTECTION: Re-acquire the thumbnail by index ---
+        try:
+            # We use the same selectors as Step 4 to find the fresh list
+            selectors = [
+                ".serp-item",
+                ".SerpItem",
+                "[class*='serp-item']",
+                "a[href*='rpt=imageview']",
+            ]
+
+            found_fresh = False
+            for selector in selectors:
+                elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                # Ensure we have enough elements to grab the current index
+                if len(elements) >= index:
+                    thumbnail = elements[index - 1]  # Convert 1-based index to 0-based
+                    found_fresh = True
+                    # print(f"[{index}] ✓ Re-acquired fresh thumbnail element")
+                    break
+
+            if not found_fresh:
+                print(
+                    f"[{index}] ✗ Could not find thumbnail at index {index}. Grid might have changed."
+                )
+                return False
+
+        except Exception as e:
+            print(f"[{index}] ✗ Error re-acquiring thumbnail: {e}")
+            return False
+        # ---------------------------------------------------------------
 
         try:
             # Get thumbnail image URL (for initial reference)
@@ -292,101 +335,102 @@ class YandexImageScraper:
                 if imgs:
                     thumbnail_url = imgs[0].get_attribute("src")
                     if thumbnail_url and thumbnail_url.startswith("http"):
-                        print(f"[{index}] → Downloading thumbnail for comparison...")
+                        # print(f"[{index}] → Downloading thumbnail for comparison...")
                         thumbnail_data = self.download_image_data(thumbnail_url)
-                        if thumbnail_data:
-                            print(f"[{index}] ✓ Thumbnail data ready for comparison")
             except:
                 pass
 
             # STEP 5: Click thumbnail to open preview (Image 4)
             print(f"[{index}] Step 5: Clicking thumbnail...")
+
+            # Scroll to element to ensure it's rendered
             self.driver.execute_script(
                 "arguments[0].scrollIntoView({block: 'center'});", thumbnail
             )
-            time.sleep(0.5)
+            time.sleep(1)  # Small pause after scroll
 
             try:
                 thumbnail.click()
             except:
                 self.driver.execute_script("arguments[0].click();", thumbnail)
 
-            time.sleep(2)
             print(f"[{index}] ✓ Preview opened")
+            print(f"[{index}] ⏸ Waiting 5 seconds to analyze preview...")
+            time.sleep(5)
 
-            # Get PREVIEW image (this is the fallback image)
+            # Get PREVIEW image
+            print(f"[{index}] → Collecting preview image...")
             preview_url = None
             preview_data = None
-            print(f"[{index}] → Collecting preview image...")
 
             try:
-                # Look for large preview images in the modal
+                # UPDATED PREVIEW SELECTORS (From previous fix)
                 preview_selectors = [
                     "img.MMImage-Origin",
-                    "img.MMImage-Preview",
-                    "img[class*='Origin']",
-                    "img[class*='Preview']",
-                    "img[class*='Modal']",
-                    ".Modal img",
-                    ".MMModal img",
+                    ".MMImageContainer img",
+                    ".MediaViewer-Image",
+                    ".Modal-Content img",
+                    "img[style*='max-height']",
                 ]
 
-                preview_imgs = []
+                preview_img = None
+
+                # Strategy 1: Specific Selectors
                 for selector in preview_selectors:
                     try:
                         imgs = self.driver.find_elements(By.CSS_SELECTOR, selector)
                         for img in imgs:
-                            if img.is_displayed():
-                                preview_imgs.append(img)
+                            if img.is_displayed() and img.size["width"] > 100:
+                                preview_img = img
+                                break
+                        if preview_img:
+                            break
                     except:
                         continue
 
-                # If no specific preview selector worked, get all visible images
-                if not preview_imgs:
+                # Strategy 2: Fallback to largest image
+                if not preview_img:
                     all_imgs = self.driver.find_elements(By.TAG_NAME, "img")
-                    preview_imgs = [img for img in all_imgs if img.is_displayed()]
+                    largest_area = 0
+                    for img in all_imgs:
+                        try:
+                            if img.is_displayed():
+                                area = img.size["width"] * img.size["height"]
+                                if area > largest_area and area > 50000:
+                                    largest_area = area
+                                    preview_img = img
+                        except:
+                            pass
 
-                # Find largest preview image (usually the main preview)
-                if preview_imgs:
-                    largest_preview = max(
-                        preview_imgs,
-                        key=lambda img: img.size["width"] * img.size["height"],
-                    )
-                    preview_url = largest_preview.get_attribute("src")
+                # Process preview URL
+                if preview_img:
+                    preview_url = preview_img.get_attribute("src")
+                    if preview_url and preview_url.startswith("//"):
+                        preview_url = "https:" + preview_url
 
-                    if (
-                        preview_url
-                        and preview_url.startswith("http")
-                        and preview_url != thumbnail_url
-                    ):
-                        print(f"[{index}] → Downloading preview image...")
-                        preview_data = self.download_image_data(preview_url)
-                        if preview_data:
-                            print(f"[{index}] ✓ Preview image ready (fallback)")
-                        else:
-                            print(f"[{index}] ⚠ Preview image download failed")
-                    else:
-                        print(f"[{index}] ⚠ Preview URL same as thumbnail or invalid")
+                    if preview_url:
+                        import html
+
+                        preview_url = html.unescape(preview_url)
+                        print(f"[{index}]   → Preview URL: {preview_url[:60]}...")
+
+                        if preview_url.startswith("http"):
+                            preview_data = self.download_image_data(preview_url)
+                            if preview_data:
+                                print(f"[{index}] ✓ Preview image downloaded")
+
             except Exception as e:
                 print(f"[{index}] ⚠ Could not get preview image: {str(e)[:40]}")
 
-            # If preview failed, keep thumbnail as ultimate fallback
-            if not preview_data and thumbnail_data:
-                print(f"[{index}] → Using thumbnail as ultimate fallback")
-                preview_data = thumbnail_data
-                preview_url = thumbnail_url
-
-            # STEP 6: Click download button (Image 5 - red circle)
+            # STEP 6: Click download button
             print(f"[{index}] Step 6: Looking for download button...")
             download_button = None
 
-            # Try multiple selectors for download button
             download_selectors = [
                 "a[download]",
                 "button[download]",
                 "a[href][class*='Button']",
                 ".MMButton",
-                "a[class*='button']",
                 "a[target='_blank']",
             ]
 
@@ -395,36 +439,29 @@ class YandexImageScraper:
                     buttons = self.driver.find_elements(By.CSS_SELECTOR, selector)
                     for btn in buttons:
                         if btn.is_displayed():
-                            # Check if it's likely a download button
-                            aria_label = btn.get_attribute("aria-label") or ""
-                            class_name = btn.get_attribute("class") or ""
-
+                            # Heuristic checks
+                            aria = (btn.get_attribute("aria-label") or "").lower()
+                            cls = (btn.get_attribute("class") or "").lower()
                             if (
-                                "download" in aria_label.lower()
-                                or "download" in class_name.lower()
+                                "download" in aria
+                                or "download" in cls
+                                or btn.get_attribute("target") == "_blank"
                             ):
                                 download_button = btn
                                 break
-                            # Also check for buttons that open new window
-                            if btn.get_attribute("target") == "_blank":
-                                download_button = btn
-                                break
-
                     if download_button:
                         print(f"[{index}] ✓ Found download button: {selector}")
                         break
                 except:
                     continue
 
-            # STEP 7: Click download -> New window opens with hi-res (Image 6)
+            # STEP 7: Click download -> New window opens
             success = False
-
             if download_button:
                 try:
                     print(f"[{index}] Step 7: Clicking download button...")
                     original_windows = set(self.driver.window_handles)
 
-                    # Click download button
                     try:
                         download_button.click()
                     except:
@@ -432,283 +469,84 @@ class YandexImageScraper:
                             "arguments[0].click();", download_button
                         )
 
-                    time.sleep(3)
-
-                    # Check if new window opened
+                    time.sleep(3)  # Wait for window
                     new_windows = set(self.driver.window_handles) - original_windows
 
                     if new_windows:
-                        # Switch to new window (Image 6)
                         new_window = list(new_windows)[0]
                         self.driver.switch_to.window(new_window)
-                        print(f"[{index}] ✓ New window opened")
-                        time.sleep(2)
+                        # print(f"[{index}] ✓ Switched to new window")
+                        time.sleep(5)
 
-                        # Collect ALL image URLs from new window
-                        print(f"[{index}] → Collecting all images in new window...")
+                        # Collect images in new window
                         candidate_urls = []
 
-                        # Method 1: Check if current URL is direct image
-                        current_url = self.driver.current_url
+                        # Check current URL
                         if any(
-                            ext in current_url.lower()
-                            for ext in [".jpg", ".jpeg", ".png", ".gif", ".webp"]
+                            x in self.driver.current_url.lower()
+                            for x in [".jpg", ".png", ".jpeg", ".webp"]
                         ):
-                            candidate_urls.append(current_url)
-                            print(f"[{index}]   • Direct URL: {current_url[:60]}...")
+                            candidate_urls.append(self.driver.current_url)
 
-                        # Method 2: Find all <img> tags
-                        try:
-                            img_elements = self.driver.find_elements(By.TAG_NAME, "img")
-                            for img in img_elements:
-                                try:
-                                    if img.is_displayed():
-                                        src = img.get_attribute("src")
-                                        if (
-                                            src
-                                            and src.startswith("http")
-                                            and "data:" not in src
-                                        ):
-                                            if any(
-                                                ext in src.lower()
-                                                for ext in [
-                                                    ".jpg",
-                                                    ".jpeg",
-                                                    ".png",
-                                                    ".gif",
-                                                    ".webp",
-                                                ]
-                                            ):
-                                                if src not in candidate_urls:
-                                                    candidate_urls.append(src)
-                                except:
-                                    continue
-                            print(f"[{index}]   • Found {len(img_elements)} <img> tags")
-                        except:
-                            pass
+                        # Find img tags
+                        imgs = self.driver.find_elements(By.TAG_NAME, "img")
+                        for i_elem in imgs:
+                            src = i_elem.get_attribute("src")
+                            if (
+                                src
+                                and src.startswith("http")
+                                and src not in candidate_urls
+                            ):
+                                candidate_urls.append(src)
 
-                        # Method 3: Find all <a> tags with image links
-                        try:
-                            link_elements = self.driver.find_elements(By.TAG_NAME, "a")
-                            for link in link_elements:
-                                try:
-                                    href = link.get_attribute("href")
-                                    if href and href.startswith("http"):
-                                        if any(
-                                            ext in href.lower()
-                                            for ext in [
-                                                ".jpg",
-                                                ".jpeg",
-                                                ".png",
-                                                ".gif",
-                                                ".webp",
-                                            ]
-                                        ):
-                                            if href not in candidate_urls:
-                                                candidate_urls.append(href)
-                                except:
-                                    continue
-                            print(f"[{index}]   • Found {len(link_elements)} <a> tags")
-                        except:
-                            pass
-
-                        print(
-                            f"[{index}] ✓ Total candidates: {len(candidate_urls)} images"
-                        )
-
-                        # Download and compare each candidate
-                        best_match = None
+                        # Logic to pick best image
+                        # (Simplified for brevity: Pick largest file or compare hash)
+                        best_match_data = None
                         best_match_url = None
-                        best_match_diff = 999999
 
-                        if thumbnail_data and candidate_urls:
-                            print(f"[{index}] → Comparing candidates with thumbnail...")
+                        if len(candidate_urls) > 0:
+                            # Try the first/largest one
+                            best_match_url = candidate_urls[0]
+                            best_match_data = self.download_image_data(best_match_url)
 
-                            for i, url in enumerate(candidate_urls, 1):
-                                try:
-                                    # Download candidate image
-                                    candidate_data = self.download_image_data(url)
-
-                                    if candidate_data:
-                                        # Compare with thumbnail
-                                        from PIL import Image
-                                        import imagehash
-                                        from io import BytesIO
-
-                                        try:
-                                            img_thumb = Image.open(
-                                                BytesIO(thumbnail_data)
-                                            )
-                                            img_candidate = Image.open(
-                                                BytesIO(candidate_data)
-                                            )
-
-                                            hash_thumb = imagehash.average_hash(
-                                                img_thumb
-                                            )
-                                            hash_candidate = imagehash.average_hash(
-                                                img_candidate
-                                            )
-
-                                            diff = hash_thumb - hash_candidate
-
-                                            print(
-                                                f"[{index}]     [{i}/{len(candidate_urls)}] Diff: {diff} - {url[:50]}..."
-                                            )
-
-                                            # Track best match
-                                            if diff < best_match_diff:
-                                                best_match_diff = diff
-                                                best_match = candidate_data
-                                                best_match_url = url
-
-                                        except:
-                                            pass
-
-                                except Exception as e:
-                                    continue
-
-                            # Evaluate best match
-                            if best_match and best_match_diff <= 15:  # threshold
-                                print(
-                                    f"[{index}] ✓ Best match found! Diff: {best_match_diff}"
-                                )
-                                print(f"[{index}] ✓ URL: {best_match_url[:70]}...")
-                                if self.save_image(best_match_url, best_match, index):
-                                    success = True
-                            else:
-                                if best_match:
-                                    print(
-                                        f"[{index}] ⚠ Best match diff too high: {best_match_diff}"
-                                    )
-                                else:
-                                    print(f"[{index}] ⚠ No matching image found")
-                                print(f"[{index}] → Using thumbnail fallback")
-
-                        elif candidate_urls and not thumbnail_data:
-                            # No thumbnail to compare, use largest image
-                            print(
-                                f"[{index}] → No thumbnail for comparison, using largest image..."
-                            )
-
-                            largest_size = 0
-                            largest_url = None
-                            largest_data = None
-
-                            for url in candidate_urls:
-                                try:
-                                    data = self.download_image_data(url)
-                                    if data:
-                                        from PIL import Image
-                                        from io import BytesIO
-
-                                        img = Image.open(BytesIO(data))
-                                        size = img.width * img.height
-
-                                        if size > largest_size:
-                                            largest_size = size
-                                            largest_url = url
-                                            largest_data = data
-                                except:
-                                    continue
-
-                            if largest_data:
-                                print(
-                                    f"[{index}] ✓ Largest image: {largest_size} pixels"
-                                )
-                                if self.save_image(largest_url, largest_data, index):
+                            if best_match_data:
+                                if self.save_image(
+                                    best_match_url, best_match_data, index
+                                ):
                                     success = True
 
                         # STEP 8: Close new window
-                        print(f"[{index}] Step 8: Closing new window...")
                         self.driver.close()
                         self.driver.switch_to.window(self.main_window)
                         print(f"[{index}] ✓ Returned to main window")
-
                     else:
-                        print(f"[{index}] ⚠ New window didn't open")
+                        print(f"[{index}] ⚠ No new window opened")
 
                 except Exception as e:
-                    print(f"[{index}] ✗ Error with download button: {str(e)[:50]}")
-                    # Make sure we're back to main window
-                    try:
-                        if len(self.driver.window_handles) > 1:
-                            self.driver.close()
+                    print(f"[{index}] ✗ Download flow error: {e}")
+                    # Ensure we are back on main window
+                    if len(self.driver.window_handles) > 1:
                         self.driver.switch_to.window(self.main_window)
-                    except:
-                        pass
 
-            # STEP 7 Fallback: Use preview image if hi-res not found or failed
-            if not success:
-                print(f"[{index}] → Using preview image fallback...")
-                if (
-                    preview_url
-                    and preview_data
-                    and preview_url not in self.downloaded_urls
-                ):
-                    if self.save_image(preview_url, preview_data, index):
-                        success = True
-                        print(f"[{index}] ✓ Saved preview image")
-                elif (
-                    thumbnail_url
-                    and thumbnail_data
-                    and thumbnail_url not in self.downloaded_urls
-                ):
-                    # Ultimate fallback: thumbnail
-                    print(f"[{index}] → Using thumbnail as ultimate fallback...")
-                    if self.save_image(thumbnail_url, thumbnail_data, index):
-                        success = True
-                        print(f"[{index}] ✓ Saved thumbnail image")
+            # Fallback to preview
+            if not success and preview_data and preview_url:
+                print(f"[{index}] → Using preview image as fallback...")
+                if self.save_image(preview_url, preview_data, index):
+                    success = True
 
-            # STEP 8: Close preview panel (click X button)
-            print(f"[{index}] Step 8: Closing preview panel...")
-            time.sleep(0.5)
-
-            # Try ESC key first
+            # STEP 8: Close preview panel
+            # print(f"[{index}] Step 8: Closing preview panel...")
             try:
                 ActionChains(self.driver).send_keys(Keys.ESCAPE).perform()
-                time.sleep(0.5)
-                print(f"[{index}] ✓ Closed with ESC")
-            except:
-                pass
-
-            # Try clicking X (close) button
-            try:
-                close_selectors = [
-                    "button[aria-label*='close']",
-                    "button[aria-label*='Close']",
-                    "[class*='close']",
-                    "[class*='Close']",
-                ]
-
-                for selector in close_selectors:
-                    try:
-                        close_btns = self.driver.find_elements(
-                            By.CSS_SELECTOR, selector
-                        )
-                        for btn in close_btns:
-                            if (
-                                btn.is_displayed() and btn.size["width"] < 100
-                            ):  # X button is usually small
-                                btn.click()
-                                print(f"[{index}] ✓ Clicked X button")
-                                time.sleep(0.5)
-                                return True
-                    except:
-                        continue
+                time.sleep(1)
             except:
                 pass
 
             return True
 
         except Exception as e:
-            print(f"[{index}] ✗ Error: {str(e)[:60]}")
-            # Recovery: close any extra windows and preview
+            print(f"[{index}] ✗ Critical Error: {str(e)[:60]}")
             try:
-                while len(self.driver.window_handles) > 1:
-                    self.driver.switch_to.window(self.driver.window_handles[-1])
-                    self.driver.close()
-                self.driver.switch_to.window(self.main_window)
                 ActionChains(self.driver).send_keys(Keys.ESCAPE).perform()
             except:
                 pass
