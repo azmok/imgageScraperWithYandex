@@ -108,7 +108,7 @@ class YandexImageScraper:
             # Go to Yandex Images (Image 1)
             print("→ Loading https://yandex.com/images/")
             self.driver.get("https://yandex.com/images/")
-            time.sleep(1.5)
+            time.sleep(2)
             self.main_window = self.driver.current_window_handle
 
             # Click camera icon (right icon in search bar)
@@ -133,7 +133,7 @@ class YandexImageScraper:
                         else:
                             elem.click()
                             print("✓ Clicked camera icon")
-                            time.sleep(1.5)
+                            time.sleep(2)
                             # Find file input after clicking
                             file_input = self.driver.find_element(
                                 By.CSS_SELECTOR, "input[type='file']"
@@ -150,7 +150,7 @@ class YandexImageScraper:
             abs_path = str(Path(image_path).resolve())
             file_input.send_keys(abs_path)
             print(f"✓ Image uploaded: {image_path}")
-            time.sleep(2.5)
+            time.sleep(4)
 
             return True
 
@@ -166,7 +166,7 @@ class YandexImageScraper:
 
         try:
             # Wait for results to load (Image 2)
-            time.sleep(1.5)
+            time.sleep(3)
 
             # Look for "Similar images" button
             print("→ Looking for 'Similar images' button...")
@@ -208,9 +208,9 @@ class YandexImageScraper:
             if similar_button:
                 similar_button.click()
                 print("✓ Clicked 'Similar images' button")
-                # print("STEP 2:::::End::::: Click 'Similar Images'")
+                print("STEP 2:::::End::::: Click 'Similar Images'")
 
-                # time.sleep(3)
+                time.sleep(3)
 
                 return True
             else:
@@ -292,7 +292,7 @@ class YandexImageScraper:
 
         # Scroll to top
         self.driver.execute_script("window.scrollTo(0, 0);")
-        time.sleep(0.5)
+        time.sleep(2)
 
         print("→ Finding thumbnail elements...")
         selectors = [
@@ -504,7 +504,7 @@ class YandexImageScraper:
                             "arguments[0].click();", download_button
                         )
 
-                    time.sleep(1.5)  # Wait for window
+                    time.sleep(3)  # Wait for window
                     new_windows = set(self.driver.window_handles) - original_windows
 
                     if new_windows:
