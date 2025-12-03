@@ -1,163 +1,252 @@
-# Yandex Similar Image Scraper
+# All files is created mainly with Claude.ai and Gemini collaboration and sometimes modify with me.
 
-A Python script that uploads an image to Yandex Images, finds similar images, and downloads them all automatically.
 
-## Features
+# Yandex Image Scraper - Local PC Version
 
-- Upload an image to Yandex Image Search
-- Navigate to "Similar Images" results
-- Automatically scroll and load more images
-- Click "Show more" button when it appears
-- Download all loaded images to a specified folder
-- Avoid duplicate downloads
-- Progress tracking and statistics
+Standalone Python script for scraping images from Yandex reverse image search.
 
-## Prerequisites
+## Requirements
 
-1. **Python 3.7+** installed on your system
-
-2. **Google Chrome** browser installed
-
-3. **ChromeDriver** matching your Chrome version
-   - Download from: https://chromedriver.chromium.org/downloads
-   - Or install via package manager:
-     - Windows (with Chocolatey): `choco install chromedriver`
-     - macOS (with Homebrew): `brew install chromedriver`
-     - Linux: `sudo apt-get install chromium-chromedriver`
+- Python 3.7+
+- Google Chrome browser installed
+- Internet connection
 
 ## Installation
 
-1. Clone or download this repository
-
-2. Install Python dependencies:
+1. **Install Python dependencies:**
 ```bash
-pip install -r requirements.txt
+pip install -r requirements_local.txt
 ```
 
-Or install manually:
-```bash
-pip install selenium requests urllib3
-```
+This installs:
+- `selenium` - Browser automation
+- `webdriver-manager` - Automatic ChromeDriver management
+- `requests` - HTTP requests for downloading images
 
-3. Make sure ChromeDriver is in your PATH, or place it in the same directory as the script
+2. **Install Google Chrome:**
+   - Download from: https://www.google.com/chrome/
+   - The script will automatically download the matching ChromeDriver
 
 ## Usage
 
-Run the script:
+### Interactive Mode (Recommended)
+
+Simply run the script and follow the prompts:
+
 ```bash
-python yandex_image_scraper.py
+python yandex_scraper_local.py
 ```
 
-The script will prompt you for:
+You'll be asked for:
+1. **Query image path** - Path to the image you want to search
+2. **Output folder** - Where to save downloaded images (default: `yandex_images`)
+3. **Max scrolls** - Maximum number of scrolls (default: 30)
+4. **Headless mode** - Run without showing browser (y/n, default: n)
 
-1. **Image path**: Path to the image you want to search (e.g., `/path/to/image.jpg`)
-2. **Output folder**: Where to save downloaded images (e.g., `my_images`)
-3. **Max scrolls**: Maximum number of times to scroll (default: 50)
-4. **Headless mode**: Run without showing browser window (y/n)
-
-### Example
+### Example Session
 
 ```
-Enter the path to the image you want to search: /home/user/sample.jpg
-Enter the output folder for downloaded images: downloaded_images
-Enter maximum number of scrolls (default 50): 30
-Run in headless mode? (y/n, default n): n
+$ python yandex_scraper_local.py
+
+============================================================
+Yandex Reverse Image Search Scraper
+============================================================
+
+Enter the path to your query image: C:\Users\Me\Pictures\query.jpg
+Enter output folder (default: yandex_images): downloaded_images
+Enter max scrolls (default: 30): 20
+Run in headless mode? (y/n, default: n): n
+
+⚙️  Configuration:
+   Query image: C:\Users\Me\Pictures\query.jpg
+   Output folder: downloaded_images
+   Max scrolls: 20
+   Headless: False
+
+============================================================
+🚀 Starting Yandex Image Scraper
+============================================================
+✓ Chrome driver initialized
+
+🔍 Uploading image: C:\Users\Me\Pictures\query.jpg
+  → Loading Yandex Images...
+  → Page loaded, searching for camera button...
+  ✓ Found camera button with: button[class*='camera']
+  ✓ Clicked camera button
+  ✓ Image uploaded: C:\Users\Me\Pictures\query.jpg
+  → Waiting for search results...
+  ✓ Found 45 results with: .serp-item
+  ✓ Clicked 'Similar' button
+
+📜 Scrolling to load more images...
+  ✓ Found 'Show more' after 8 scrolls
+
+📸 Collecting thumbnails...
+  ✓ Found 120 thumbnails
+
+============================================================
+⬇️  Downloading 120 images...
+============================================================
+
+  ✓ [1] yandex_0001.jpg
+  ✓ [2] yandex_0002.png
+  ...
+
+============================================================
+✅ Download Complete!
+   Successfully downloaded: 115/120
+   Saved to: C:\Users\Me\downloaded_images
+============================================================
+
+✓ Browser closed
 ```
 
-## How It Works
+## Features
 
-1. **Opens Yandex Images** and clicks the camera icon for reverse image search
-2. **Uploads your image** using the file input
-3. **Waits for search results** to load
-4. **Clicks "Similar Images"** tab if available
-5. **Scrolls down repeatedly** to load more images
-6. **Clicks "Show more"** button when it appears
-7. **Extracts all image URLs** from the loaded page
-8. **Downloads images** to your specified folder with unique filenames
+### Headless vs Normal Mode
 
-## Features & Options
+**Normal Mode (default):**
+- Shows browser window
+- You can see what the scraper is doing
+- Good for debugging
+- Slower but visual feedback
 
-### Automatic Scrolling
-- The script automatically scrolls to the bottom of the page
-- Waits for new images to load after each scroll
-- Stops when no more images are loading or max scrolls reached
+**Headless Mode:**
+- No browser window
+- Runs in background
+- Faster
+- Good for automation
 
-### "Show More" Button Handling
-- Automatically detects and clicks the "Show more" button
-- Continues scrolling after clicking
-- Tracks how many times the button was clicked
+### Automatic ChromeDriver
 
-### Download Management
-- Creates output folder if it doesn't exist
-- Generates unique filenames using URL hash
-- Skips already downloaded images (resume support)
-- Shows download progress and statistics
+The script uses `webdriver-manager` which:
+- Automatically downloads the correct ChromeDriver version
+- Matches your Chrome browser version
+- No manual setup needed
 
-### Error Handling
-- Handles network errors gracefully
-- Continues downloading even if some images fail
-- Provides detailed error messages
-- Shows final success/failure statistics
+### Mobile User Agent
+
+The script emulates an iPhone to get the mobile version of Yandex, which is more reliable for scraping.
+
+## File Structure
+
+After running, you'll have:
+```
+your-folder/
+├── yandex_scraper_local.py    # Main script
+├── requirements_local.txt      # Dependencies
+└── yandex_images/              # Downloaded images (default)
+    ├── yandex_0001.jpg
+    ├── yandex_0002.png
+    ├── yandex_0003.jpg
+    └── ...
+```
+
+## Programmatic Usage
+
+You can also import and use the scraper in your own code:
+
+```python
+from yandex_scraper_local import YandexImageScraper
+
+# Create scraper
+scraper = YandexImageScraper(
+    download_folder="my_images",
+    headless=True  # Run without showing browser
+)
+
+# Run scraping
+scraper.scrape(
+    query_image_path="path/to/image.jpg",
+    max_scrolls=50
+)
+```
 
 ## Troubleshooting
 
-### ChromeDriver version mismatch
+### Chrome/ChromeDriver Issues
+
+If you get ChromeDriver errors:
+1. Make sure Chrome is installed
+2. Try updating Chrome to the latest version
+3. Delete the webdriver-manager cache:
+   - Windows: `C:\Users\YourName\.wdm\`
+   - Mac/Linux: `~/.wdm/`
+
+### "File not found" Error
+
+Make sure to provide the full path to your image:
+- Windows: `C:\Users\Me\Pictures\image.jpg`
+- Mac/Linux: `/Users/me/Pictures/image.jpg`
+- Or use relative path: `./images/image.jpg`
+
+### No Images Downloaded
+
+- Check your internet connection
+- Try increasing `max_scrolls`
+- Run in normal mode (not headless) to see what's happening
+- Yandex might have changed their page structure
+
+### Slow Performance
+
+- Use headless mode for faster execution
+- Reduce `max_scrolls` to get fewer images
+- Check your internet speed
+
+## Advanced Configuration
+
+Edit the script to customize:
+
+**Change wait times:**
+```python
+time.sleep(5)  # Line 67 - After page load
+time.sleep(2)  # Line 282 - Between downloads
 ```
-Error: This version of ChromeDriver only supports Chrome version XX
+
+**Change user agent:**
+```python
+mobile_emulation = {
+    "userAgent": "Your custom user agent here"
+}
 ```
-**Solution**: Download ChromeDriver matching your Chrome version from https://chromedriver.chromium.org/
 
-### Selenium not found
+**Change download timeout:**
+```python
+response = requests.get(url, headers=headers, timeout=15)  # Line 221
 ```
-ModuleNotFoundError: No module named 'selenium'
-```
-**Solution**: Install dependencies with `pip install -r requirements.txt`
-
-### Upload button not found
-**Solution**: Yandex may have changed their UI. The script uses multiple selectors to find elements, but you may need to update the selectors in the code.
-
-### No images downloaded
-**Possible causes**:
-- Yandex blocked the request (try adding delays or using headless=False)
-- Image URLs are behind authentication
-- Network connectivity issues
-
-**Solution**: Run in non-headless mode to see what's happening, and check the console output for errors.
-
-### Rate limiting
-If downloads are failing, Yandex might be rate-limiting. The script includes small delays between downloads, but you can increase them by modifying the `time.sleep()` value in the `download_images()` function.
-
-## Customization
-
-### Change User Agent
-Modify the `User-Agent` string in `setup_driver()` and `download_images()` functions.
-
-### Adjust Scroll Speed
-Change `time.sleep(2)` in `scroll_and_load_images()` to increase/decrease wait time between scrolls.
-
-### Modify Download Delay
-Change `time.sleep(0.1)` in `download_images()` to adjust delay between downloads.
-
-### Add More Selectors
-If the script can't find elements, add more CSS selectors or XPath expressions to the selector lists.
 
 ## Limitations
 
-- Depends on Yandex's current HTML structure
-- May need updates if Yandex changes their website
-- Download speed limited to avoid overwhelming servers
-- Some images may be behind CDN protection
+- Only downloads what's loaded after scrolling
+- Some sources may be dead/unavailable
+- Rate limiting may apply for excessive use
+- Yandex may update their page structure
 
-## Legal Notice
+## Tips
 
-This script is for educational purposes only. Always respect:
-- Website terms of service
-- Copyright and intellectual property rights
-- Rate limiting and responsible scraping practices
-- Personal data and privacy regulations
+1. **For best results:**
+   - Use clear, high-quality query images
+   - Start with fewer scrolls (10-20) to test
+   - Use normal mode first to see the process
 
-Use responsibly and at your own risk.
+2. **For large batches:**
+   - Use headless mode
+   - Increase max_scrolls (50-100)
+   - Add delay between images if needed
+
+3. **File organization:**
+   - Use descriptive folder names
+   - Sort images by query image used
+   - Clean up thumbnails vs high-res images
 
 ## License
 
-MIT License - feel free to modify and use as needed.
+MIT License - Free to use and modify
+
+## Support
+
+If you encounter issues:
+1. Check Chrome is up to date
+2. Run in normal mode to see the browser
+3. Check the console output for error messages
+4. Make sure the query image path is correct
