@@ -1,8 +1,7 @@
-# All files is created mainly with Claude.ai and Gemini collaboration and sometimes modify with me.
+# All files are created mainly with Claude.ai and Google Gemini collaboration and sometimes modify with me.
 
 
-# Yandex Image Scraper - Local PC Version
-
+# Yandex Image Scraper
 Standalone Python script for scraping images from Yandex reverse image search.
 
 ## Requirements
@@ -15,7 +14,7 @@ Standalone Python script for scraping images from Yandex reverse image search.
 
 1. **Install Python dependencies:**
 ```bash
-pip install -r requirements_local.txt
+pip install -r requirements.txt
 ```
 
 This installs:
@@ -34,7 +33,7 @@ This installs:
 Simply run the script and follow the prompts:
 
 ```bash
-python yandex_scraper_local.py
+python yandex_scraper.py
 ```
 
 You'll be asked for:
@@ -46,7 +45,7 @@ You'll be asked for:
 ### Example Session
 
 ```
-$ python yandex_scraper_local.py
+$ python yandex_scraper.py
 
 ============================================================
 Yandex Reverse Image Search Scraper
@@ -126,15 +125,15 @@ The script uses `webdriver-manager` which:
 
 ### Mobile User Agent
 
-The script emulates an iPhone to get the mobile version of Yandex, which is more reliable for scraping.
+The script emulates Desktop/Laptop PC to get the desktop version of Yandex, which is more reliable for scraping.
 
 ## File Structure
 
 After running, you'll have:
 ```
 your-folder/
-├── yandex_scraper_local.py    # Main script
-├── requirements_local.txt      # Dependencies
+├── yandex_scraper.py    # Main script
+├── requirements.txt      # Dependencies
 └── yandex_images/              # Downloaded images (default)
     ├── yandex_0001.jpg
     ├── yandex_0002.png
@@ -147,7 +146,7 @@ your-folder/
 You can also import and use the scraper in your own code:
 
 ```python
-from yandex_scraper_local import YandexImageScraper
+from yandex_scraper import YandexImageScraper
 
 # Create scraper
 scraper = YandexImageScraper(
